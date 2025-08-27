@@ -1,102 +1,84 @@
-# RobotCar-MQTT — STM32 ↔ ESP32 (Komut-Köprüsü)
+# RobotCar-MQTT — STM32 ↔ ESP32 (Komut Köprüsü)
 
+## 1) Sistem Açıklaması & Yazılım Mimarisi
+Bu proje **komut-temelli** çalışır: **ESP32**, MQTT’den aldığı **sayısal** payload’ları (`"1"`, `"2"`, `"3"` …) **UART1 (115200-8N1, `\n`)** ile **STM32**’ye iletir; **STM32** gelen numarayı **motor fonksiyonlarına** çevirir. Bu sürümde **sensör/telemetri yoktur** (yalnızca **MQTT → UART → Motor** akışı).
+
+**ESP32 (ESP-IDF) modülleri**
+- `wifi_connect.[ch]` → STA bağlan/yeniden bağlan (SSID/PASS NVS)
+- `app_mqtt.[ch]` → MQTT client (LWT; subscribe/publish API)
+- `uart.[ch]` → UART1 satır-sonlu yazım (`\n`)
+- `app_main.c` → görevlerin başlatılması
+
+**Görevler**
+- `wifi_task` → Wi-Fi bağlan/yeniden bağlan
+- `mqtt_task` → Broker’a bağlan; **LWT**: `robot/status=offline` (bağlanınca `online`)
+- `uart_tx_task` → `robotcar.commands` (veya `robot/command`) topic’inden gelen **payload’u aynen** `\n` ile STM32’ye yazar
+- `uart_rx_task` → **Bu sürümde kullanılmıyor** (telemetri yok)
+
+**STM32 tarafı (özet)**
+- `main.c` / `motor_control.c` sayısal komutu yorumlar ve ilgili **motor yön/hız** fonksiyonunu çağırır.
+- Örnek eşleme (kendi tablonla değiştir):
+  - `1` → ileri, `2` → geri, `3` → sol, `4` → sağ, `5` → dur
+
+---
+
+## 2) Sistem Genel Bakış & Adafruit IO
 ![Genel görünüm](system_overview.png)
 
-## Projeyi Ayrıntılı Açıklama
-Bu proje, **ESP32** üzerinden gelen **sayısal komutları (1,2,3,...)** seri hat (**UART**) ile **STM32**’ye iletir; STM32 de gelen komuta göre **motor fonksiyonlarını çalıştırır**. Bu sürüm **yalnızca komut köprüsü** içerir; **ultrasonik sensör / telemetri yoktur**.
+**Adafruit IO Pano**
+- **Feed:** `robotcar.commands`
+- **Payload:** tam sayı metni (`"1"`, `"2"`, …). ESP32 → UART → STM32.
+- **Örnek akış:** `Adafruit IO ► MQTT ► ESP32 ► UART ► STM32 ► Motor`
 
-- **Komut formatı:** ASCII sayı + satır sonu  
-  Örn: `1\n`, `2\n`, `3\n`  
-- **Eşleme (örnek):** *(Kendi eşlemen farklıysa tabloyu değiştir)*
+![Adafruit IO feed](docs/adafruit_feed_robotcar_commands.png)
 
-  | Değer | STM32 Aksiyonu (örnek) |
-  |------:|------------------------|
-  | 1     | `FORWARD`              |
-  | 2     | `BACK`                 |
-  | 3     | `LEFT`                 |
-  | 4     | `RIGHT`                |
-  | 5     | `STOP`                 |
-
-- **Bağlantı dayanıklılığı:** ESP32 Wi-Fi + MQTT otomatik yeniden bağlanma.  
-- **Durum yayını (opsiyonel):** MQTT **LWT** ile `robot/status = offline/online`.  
-- **Not:** `uart_rx_task` **kullanılmıyor** (telemetri yok). Yalnızca **MQTT → UART (tx)** yönü aktiftir.
+> Notlar:
+> - Sadece **tek yön** (MQTT→UART) vardır; `uart_rx_task` pasif.
+> - İstersen `robot/status` topic’iyle **online/offline** durumu yayınlanır (LWT).
 
 ---
 
+## 3) Donanımsal Bileşenler & Bağlantılar
+**Bileşenler**
+- **STM32F407VGT6 (LQFP100)**
+- **ESP32** (UART1 kullanılacak)
+- Motor sürücü + motor(lar)
+- 3.3 V regülatör ve baypas kapasitörleri
 
-**ESP32 görevleri**
-- `wifi_task` — STA bağlan/yeniden bağlan  
-- `mqtt_task` — broker’a bağlan, `robotcar.commands` (veya `robot/command`) abonesi  
-- `uart_tx_task` — gelen payload’ı **aynen** `\n` ile **UART1**’e yazar  
-- `uart_rx_task` — **bu sürümde devre dışı** (telemetri yok)
+**Seviye & Toprak**
+- Her iki uç **3.3 V TTL**; **ortak GND şart**.
 
-> ESP-IDF konsol/log görünümü:  
-> ![ESP32 console](docs/esp32_console.png)
+**UART hattı**
+- STM32 **USART2_TX = PD5  →  ESP32 RX = GPIO16**
+- STM32 **USART2_RX = PD6  ←  ESP32 TX = GPIO17**
+- Baud: **115200-8N1**, satır sonu: **`\n`**
 
----
+**Motor pinleri (örnek)**
+- Yön: **PA1–PA4**
+- PWM: **PA5 (TIM2_CH1)** ve/veya **PC6 (TIM3_CH1)**
 
-## Adafruit IO Pano
-Komutları kolay vermek için **Adafruit IO** üzerinde bir feed/dash kullanılır.
+![STM32 Pinout](docs/pinout_stm32f407.png)
 
-- **Feed adı (örnek):** `robotcar.commands`  
-- **Gönderilen değerler:** `1`, `2`, `3`, … *(STM32 bu sayıyı komuta çevirir)*  
-- **Dashboard öğeleri:** Butonlar (Momentary/Toggle) veya Slider (tam sayı)  
-- **Akış:** `Adafruit IO ► MQTT ► ESP32 ► UART ► STM32 ► Motor`
-
-> Örnek feed ekranı:  
-> ![Adafruit IO feed](docs/adafruit_feed_robotcar_commands.png)
-
----
-
-## Donanımsal Bilgiler
-> STM32F407VGT6 (LQFP100) pin görünümü:  
-> ![STM32 Pinout](docs/pinout_stm32f407.png)
-
-- **Seviye:** 3.3 V **TTL**, **ortak GND şart**  
-- **UART hattı:**
-  - STM32 **USART2_TX = PD5 → ESP32 RX = GPIO16**
-  - STM32 **USART2_RX = PD6 ← ESP32 TX = GPIO17**
-- **Motor pinleri (örnek):**  
-  Yön: **PA1–PA4** · PWM: **PA5 (TIM2_CH1)** ve/veya **PC6 (TIM3_CH1)**  
-- **İpuçları:** Kısa UART kablosu, 100 nF yakın bypass; ESP32 için 3.3 V regülatörde yeterli **ani akım** (≥ 500–700 mA burst).
+**Pratik ipuçları**
+- ESP32 için 3.3 V regülatörde **ani akım** payı bırak (≥ 500–700 mA burst).
+- UART kablolarını kısa tut; gerekirse GND ile bükümlü çift yap.
+- Satır sonu sözleşmesini iki uçta da **`\n`** olarak sabitle.
 
 ---
 
-## Bu Projeden Öğrendiklerim
-- **Basit sayısal komut protokolü** ile hızlı ve güvenilir bir köprü kurulabiliyor.  
-- MQTT tarafında **topic tasarımı** ve **LWT** kullanımı sistemi gözlemlenebilir kılıyor.  
-- Seri hatta **satır sonu (`\n`) sözleşmesi** olmadan veri ayrıştırmanın zorlaştığını gördüm.  
-- Komut-yalnız köprüde “**tek yönlü**” akış (MQTT→UART) çoğu durumda yeterli; ACK/telemetri ihtiyacı doğarsa ikinci kanal eklenebilir.
+## 4) Projeden Faydalandıklarım
+- **Basit sayısal komut protokolü** ile hızlı ve sağlam bir köprü kurulabileceğini gördüm.
+- MQTT tarafında **topic tasarımı** + **LWT** kullanımıyla sistem durumu net izleniyor.
+- **Satır-sonlu** veri sözleşmesi olmadan UART üzerinde ayrıştırmanın zorlaştığını deneyimledim.
+- Tek yön akış (MQTT→UART) ile **minimum karmaşıklık** ve düşük gecikme elde edildi.
 
 ---
 
-## Gelecekteki İyileştirmeler (genel)
-- **RTOS düzeni:** Görevleri ayır (Wi-Fi, MQTT, UART-TX), **kuyruk** ile besle; öncelikleri düzenle.  
-- **DMA:** STM32 **USART2 DMA (ReceiveToIdle)** ve/veya ESP32 **UART driver** ile tampon yönetimini iyileştir.  
-- **Enerji tasarrufu:** ESP32’de **light-sleep**, STM32’de **STOP/LP-RUN**; gösterge LED’lerini kapat.  
-- **OTA:** ESP32’de **A/B slot** OTA ve SHA-256 doğrulama; `robot/status=updating`.  
-- **Protokol:** İleride gerekirse **ACK/NACK** ve basit **CRC** ekle; komut tablosunu JSON ile yapılandırılabilir yap.  
-- **Gözlemlenebilirlik:** MQTT’de `robot/health` ping’i; basit sayaçlar (reconnect, yazılan UART satırı).  
-- **Donanım:** Motor sürücü korumaları (akım, termal); kablolamada noise azaltma; (isteğe bağlı) enkoder ekleyip PID.
-
----
-
-## Dizin Yapısı (özet)
-```text
-.
-├─ esp32/
-│  ├─ main/                 # app_main.c, mqtt/uart/wifi kaynakları
-│  └─ CMakeLists.txt
-├─ stm32/
-│  ├─ main.c
-│  ├─ motor_control.c
-│  └─ motor_control.h
-├─ docs/
-│  ├─ pinout_stm32f407.png
-│  ├─ esp32_console.png
-│  └─ adafruit_feed_robotcar_commands.png
-├─ system_overview.png
-└─ README.md
-
-
-## Sistem Genel Bakış
+## 5) Gelecekteki İyileştirmeler (genel)
+- **RTOS düzeni:** Wi-Fi, MQTT, UART-TX için ayrı görevler; **queue** ile besleme, öncelik ve çekirdek pinleme.
+- **DMA:** STM32’de **USART2 DMA (ReceiveToIdle)** hazırla (ileride telemetri eklersen CPU yükü düşer).
+- **Enerji:** ESP32 **light-sleep**, STM32 **STOP/LP-RUN**; LED’leri GPIO-hold ile kapat.
+- **OTA:** ESP32 için **A/B slot** OTA + SHA-256; güncelleme sırasında `robot/status=updating`.
+- **Protokol:** Gerekirse **ACK/NACK** + basit **CRC**; komut tablosunu JSON/NVS ile **konfigüre edilebilir** yap.
+- **Gözlemlenebilirlik:** `robot/health` ping’i; reconnect, yazılan UART satırı sayacı.
+- **Opsiyonel telemetri:** İleride hız/akım vb. ölçümler eklemek istersen `robot/telemetry` ile gönder; 10 Hz rate-limit uygula.
