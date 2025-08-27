@@ -10,9 +10,9 @@
 
 // ---- MQTT ----
 #define MQTT_BROKER_URI     "mqtt://io.adafruit.com"
-#define MQTT_USERNAME       "Judjol"
-#define MQTT_PASSWORD       "aio_JYmb70ysYupOwi23DZ2mR15J2kmc"
-#define MQTT_FEED_COMMAND   "Judjol/feeds/robotcar-dot-commands"
+#define MQTT_USERNAME       "******"
+#define MQTT_PASSWORD       "******"
+#define MQTT_FEED_COMMAND   "********"
 
 #define ESP32_LED_GPIO GPIO_NUM_2
 
@@ -64,7 +64,7 @@ void app_main(void)
     gpio_set_direction(ESP32_LED_GPIO, GPIO_MODE_OUTPUT);
     gpio_set_level(ESP32_LED_GPIO, 0);
 
-    wifi_connect_init("Redmi 13", "1234554321");
+    wifi_connect_init("*****", "****");
 
     mqtt_set_command_callback(on_mqtt_cmd);
     mqtt_app_start(MQTT_BROKER_URI, MQTT_USERNAME, MQTT_PASSWORD, MQTT_FEED_COMMAND);
@@ -76,3 +76,4 @@ void app_main(void)
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
 }
+
