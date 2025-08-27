@@ -1,78 +1,91 @@
-# RobotCar-MQTT — STM32 ↔ ESP32 UART + MQTT Köprüsü
+# RobotCar-MQTT — STM32 ↔ ESP32 (Komut-Köprüsü)
 
-> STM32 (motor + sensör) seri hat üzerinden **ESP32**’ye veri gönderir; ESP32 bu veriyi **MQTT**’ye yayınlar ve MQTT’den gelen komutları satır-sonlu (`\n`) olarak STM32’ye iletir.  
-> **Failsafe:** Komut yoksa **500 ms → STOP**; mesafe < **50 mm → STOP + buzzer**.  
-> **UART:** 115200-8N1 • **Seviye:** 3.3V TTL • **Ortak GND şart**
+![Genel görünüm](system_overview.png)
 
-![System overview](system_overview.png)
+## Projeyi Ayrıntılı Açıklama
+Bu proje, **ESP32** üzerinden gelen **sayısal komutları (1,2,3,...)** seri hat (**UART**) ile **STM32**’ye iletir; STM32 de gelen komuta göre **motor fonksiyonlarını çalıştırır**. Bu sürüm **yalnızca komut köprüsü** içerir; **ultrasonik sensör / telemetri yoktur**.
 
----
+- **Komut formatı:** ASCII sayı + satır sonu  
+  Örn: `1\n`, `2\n`, `3\n`  
+- **Eşleme (örnek):** *(Kendi eşlemen farklıysa tabloyu değiştir)*
 
-## İçindekiler
-- [Özellikler](#özellikler)
-- [Donanım & Pinout](#donanım--pinout)
-- [Mimari & Görevler](#mimari--görevler)
-- [MQTT Konuları (Topics)](#mqtt-konuları-topics)
-- [Dizin Yapısı](#dizin-yapısı)
-- [Kurulum & Derleme](#kurulum--derleme)
-  - [STM32 (CubeIDE)](#stm32-cubeide)
-  - [ESP32 (ESP-IDF)](#esp32-esp-idf)
-- [Test Planı](#test-planı)
-- [Sorun Giderme](#sorun-giderme)
-- [Yol Haritası](#yol-haritası)
-- [Lisans](#lisans)
+  | Değer | STM32 Aksiyonu (örnek) |
+  |------:|------------------------|
+  | 1     | `FORWARD`              |
+  | 2     | `BACK`                 |
+  | 3     | `LEFT`                 |
+  | 4     | `RIGHT`                |
+  | 5     | `STOP`                 |
 
----
-
-## Özellikler
-- STM32 (PWM motor + sensör) ↔ ESP32 (Wi-Fi/MQTT) seri köprü
-- **LWT:** `robot/status = offline` (bağlanınca `online`)
-- **Telemetri rate-limit:** ~10 Hz
-- Satır sonu standardı: **`\n`** (her iki uçta da)
-- Wi-Fi & MQTT otomatik yeniden bağlanma
-
----
-
-## Donanım & Pinout
-- **UART:**  
-  - STM32 **USART2_TX = PD5 → ESP32 RX = GPIO16**  
-  - STM32 **USART2_RX = PD6 ← ESP32 TX = GPIO17**  
-- **STM32 ek pinler:**  
-  Yön: **PA1–PA4** • PWM: **PA5 (TIM2_CH1)** & **PC6 (TIM3_CH1)** •  
-  **HC-SR04:** TRIG=**PD10**, ECHO=**PD12** • **Buzzer:** **PA0**
-
-> CubeMX pin görünümü:  
-> ![STM32F407 Pinout](docs/pinout_stm32f407.png)
+- **Bağlantı dayanıklılığı:** ESP32 Wi-Fi + MQTT otomatik yeniden bağlanma.  
+- **Durum yayını (opsiyonel):** MQTT **LWT** ile `robot/status = offline/online`.  
+- **Not:** `uart_rx_task` **kullanılmıyor** (telemetri yok). Yalnızca **MQTT → UART (tx)** yönü aktiftir.
 
 ---
 
 
-**ESP32 görevleri:**
+**ESP32 görevleri**
 - `wifi_task` — STA bağlan/yeniden bağlan  
-- `mqtt_task` — Broker bağlantısı, LWT `robot/status`  
-- `uart_rx_task` — STM32’den gelen `SENS,...\n` satırlarını `robot/telemetry`’e publish (10 Hz)  
-- `uart_tx_task` — `robot/command` payload’unu `\n` ile UART’a yaz
+- `mqtt_task` — broker’a bağlan, `robotcar.commands` (veya `robot/command`) abonesi  
+- `uart_tx_task` — gelen payload’ı **aynen** `\n` ile **UART1**’e yazar  
+- `uart_rx_task` — **bu sürümde devre dışı** (telemetri yok)
 
 > ESP-IDF konsol/log görünümü:  
 > ![ESP32 console](docs/esp32_console.png)
 
 ---
 
-## MQTT Konuları (Topics)
-- **Komut:** `robot/command`  Örn: `FORWARD:600`  
-- **Telemetri:** `robot/telemetry`  Örn: `SENS,ts=...,dist_mm=...`  
-- **Durum:** `robot/status` → `online` / `offline` (LWT)
+## Adafruit IO Pano
+Komutları kolay vermek için **Adafruit IO** üzerinde bir feed/dash kullanılır.
 
-> Adafruit IO feed örneği:  
+- **Feed adı (örnek):** `robotcar.commands`  
+- **Gönderilen değerler:** `1`, `2`, `3`, … *(STM32 bu sayıyı komuta çevirir)*  
+- **Dashboard öğeleri:** Butonlar (Momentary/Toggle) veya Slider (tam sayı)  
+- **Akış:** `Adafruit IO ► MQTT ► ESP32 ► UART ► STM32 ► Motor`
+
+> Örnek feed ekranı:  
 > ![Adafruit IO feed](docs/adafruit_feed_robotcar_commands.png)
 
 ---
 
-## Dizin Yapısı
+## Donanımsal Bilgiler
+> STM32F407VGT6 (LQFP100) pin görünümü:  
+> ![STM32 Pinout](docs/pinout_stm32f407.png)
+
+- **Seviye:** 3.3 V **TTL**, **ortak GND şart**  
+- **UART hattı:**
+  - STM32 **USART2_TX = PD5 → ESP32 RX = GPIO16**
+  - STM32 **USART2_RX = PD6 ← ESP32 TX = GPIO17**
+- **Motor pinleri (örnek):**  
+  Yön: **PA1–PA4** · PWM: **PA5 (TIM2_CH1)** ve/veya **PC6 (TIM3_CH1)**  
+- **İpuçları:** Kısa UART kablosu, 100 nF yakın bypass; ESP32 için 3.3 V regülatörde yeterli **ani akım** (≥ 500–700 mA burst).
+
+---
+
+## Bu Projeden Öğrendiklerim
+- **Basit sayısal komut protokolü** ile hızlı ve güvenilir bir köprü kurulabiliyor.  
+- MQTT tarafında **topic tasarımı** ve **LWT** kullanımı sistemi gözlemlenebilir kılıyor.  
+- Seri hatta **satır sonu (`\n`) sözleşmesi** olmadan veri ayrıştırmanın zorlaştığını gördüm.  
+- Komut-yalnız köprüde “**tek yönlü**” akış (MQTT→UART) çoğu durumda yeterli; ACK/telemetri ihtiyacı doğarsa ikinci kanal eklenebilir.
+
+---
+
+## Gelecekteki İyileştirmeler (genel)
+- **RTOS düzeni:** Görevleri ayır (Wi-Fi, MQTT, UART-TX), **kuyruk** ile besle; öncelikleri düzenle.  
+- **DMA:** STM32 **USART2 DMA (ReceiveToIdle)** ve/veya ESP32 **UART driver** ile tampon yönetimini iyileştir.  
+- **Enerji tasarrufu:** ESP32’de **light-sleep**, STM32’de **STOP/LP-RUN**; gösterge LED’lerini kapat.  
+- **OTA:** ESP32’de **A/B slot** OTA ve SHA-256 doğrulama; `robot/status=updating`.  
+- **Protokol:** İleride gerekirse **ACK/NACK** ve basit **CRC** ekle; komut tablosunu JSON ile yapılandırılabilir yap.  
+- **Gözlemlenebilirlik:** MQTT’de `robot/health` ping’i; basit sayaçlar (reconnect, yazılan UART satırı).  
+- **Donanım:** Motor sürücü korumaları (akım, termal); kablolamada noise azaltma; (isteğe bağlı) enkoder ekleyip PID.
+
+---
+
+## Dizin Yapısı (özet)
 ```text
 .
 ├─ esp32/
-│  ├─ main/                 # app_main.c, app_mqtt.c/.h, uart.c/.h, wifi_connect.c
+│  ├─ main/                 # app_main.c, mqtt/uart/wifi kaynakları
 │  └─ CMakeLists.txt
 ├─ stm32/
 │  ├─ main.c
@@ -83,8 +96,7 @@
 │  ├─ esp32_console.png
 │  └─ adafruit_feed_robotcar_commands.png
 ├─ system_overview.png
-├─ .gitattributes
 └─ README.md
 
 
-## Mimari & Görevler
+## Sistem Genel Bakış
