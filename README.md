@@ -54,20 +54,28 @@ Bu proje **komut-temelli** bir köprü kurar: **ESP32**, MQTT’den aldığı **
 
 ---
 
-## 4) Projeden Faydalandıklarım
-- Basit **sayısal komut** yapısı ile hızlı ve kararlı bir köprü kurulabildi.
-- **MQTT + LWT** ile sistemin çevrimiçi/çevrimdışı durumu takip edilebilir oldu.
-- **Satır-sonlu (`\n`)** sözleşmesinin UART ayrıştırmayı ne kadar kolaylaştırdığı görüldü.
-- Tek yön (**MQTT → UART**) tasarımının devreye almayı sadeleştirdiğini deneyimledim.
+## Yazılımda Öğrendiklerim
+
+### UART
+- 115200-8N1 satır-sonlu (`\n`) metin protokolü; örnek: `FORWARD:700\n`
+- Satır ayrıştırma, giriş doğrulama ve basit geri bildirim (OK/ERR)
+
+### Wi-Fi & MQTT
+- STA bağlan/yeniden bağlan (SSID/PASS NVS’te saklama)
+- MQTT client + LWT (online/offline), otomatik reconnect
+- Konu yapısı: `robot/command`, `robot/telemetry`, `robot/status`
+- Gerekirse telemetri için yayın hızını sınırlama
+
+### Motor Sürme
+- Komutları ayrıştırıp yön + PWM’e çevirme
 
 ---
 
-## 5) Gelecekteki İyileştirmeler (genel, sade)
+## 5) Gelecekteki İyileştirmeler 
 - **RTOS kullanmak:** Wi-Fi, MQTT ve UART gönderimi için ayrı görevler; görev önceliklerini düzenlemek.
-- **DMA kullanmak:** STM32’de UART için DMA alımını eklemek (ileride telemetri gerekir ise).
+- **DMA kullanmak:** STM32’de UART için DMA alımını eklemek .
 - **Enerji tasarrufu eklemek:** ESP32’de light-sleep, STM32’de düşük güç modlarını denemek.
 - **OTA eklemek:** ESP32’ye kablosuz güncelleme (A/B slot, basit doğrulama).
 - **Protokolü güçlendirmek:** Gerekirse ACK/NACK ve basit bir hata kontrolü eklemek.
-- **Gözlemlenebilirlik eklemek:** Health ping ve basit sayaçlar (yeniden bağlanma vb.).
 - **İsteğe bağlı telemetri:** İleride hız/akım vs. ölçümleri `robot/telemetry` ile göndermek (oran sınırlı).
 
