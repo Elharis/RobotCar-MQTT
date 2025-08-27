@@ -36,17 +36,19 @@ Bu proje **komut-temelli** bir köprü kurar: **ESP32**, MQTT’den aldığı **
 - **STM32:** UART komutlarını **motor sürme** fonksiyonlarına çevirir
 - **MQTT Broker:** Komutların yayınlandığı/aboneliklerin yapıldığı sunucu
 
-PA9 -> USART1_TX -> ESP32 - U2_RXD (G16)
-PA10 -> USART1_RX -> ESP32 - U2_TXD (G17)
-PB6 -> I2C1_SCL -> BME280 - SCL
-PB7 -> I2C1_SDA -> BME280 - SDA
-PC2 -> GPIO_Çıkışı -> LED
-PC3 -> GPIO_EXTI3 -> Ses Sensörü
-PA1-PA4 -> GPIO_Çıkışı -> Motor Yön
-PA5 -> TIM2_CH1 -> Motor PWM (Hız)
-PC6 -> TIM3_CH1 -> Motor PWM (Hız, opsiyonel)
-3V3 -> 3.3V TTL seviye
-GND -> Ortak GND (STM32 ↔ ESP32 ↔ Sensörler
+- UART seviyesi **3.3 V TTL**  
+- **Ortak GND**(ESP32 ↔ STM32)
+
+**UART hattı (bağlantı)**
+- STM32 **USART2_TX = PD5  →  ESP32 RX = GPIO16**
+- STM32 **USART2_RX = PD6  ←  ESP32 TX = GPIO17**
+- Baud: **115200-8N1**, satır sonu: **`\n`**
+
+**Motor sürme (STM32)**
+- Yön pinleri (örnek): **PA1–PA4**
+- PWM : **PA5 (TIM2_CH1)** ve **PC6 (TIM3_CH1)**
+- `motor_control.c/.h` içinde ileri/geri/sol/sağ/dur fonksiyonları
+
 > STM32F407 pin görünümü:  
 > ![STM32 Pinout](docs/pinout_stm32f407.png)
 
