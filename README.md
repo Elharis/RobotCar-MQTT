@@ -2,7 +2,7 @@
 
 ## 1) Sistem Açıklaması & Yazılım Mimarisi
 Bu proje **komut-temelli** bir köprü kurar: **ESP32**, MQTT’den aldığı **sayısal** değerleri (`"1"`, `"2"`, `"3"` …) **UART1 (115200-8N1, `\n`)** ile **STM32**’ye gönderir; **STM32** bu değeri motor fonksiyonuna çevirip motoru sürer.  
-> Bu sürümde **sensör/telemetri yok**; akış **MQTT → UART → Motor** yönündedir.
+
 
 **ESP32 (ESP-IDF) tarafı (yazılım)**
 - `wifi_connect.[ch]` → Wi-Fi STA bağlan/yeniden bağlan (SSID/PASS NVS)
@@ -10,7 +10,7 @@ Bu proje **komut-temelli** bir köprü kurar: **ESP32**, MQTT’den aldığı **
 - `uart.[ch]` → UART1’e satır-sonlu (`\n`) yazım
 - `app_main.c` → görevlerin başlatılması
 - Aktif görevler: `wifi_task`, `mqtt_task`, **`uart_tx_task`**  
-  (Not: `uart_rx_task` bu sürümde **kullanılmıyor**)
+ 
 
 **STM32 tarafı (yazılım)**
 - `main.c` / `motor_control.c` sayısal komutu yorumlar; **ileri/geri/sol/sağ/dur** gibi fonksiyonları çağırır.
